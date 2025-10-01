@@ -1,6 +1,6 @@
 {
   "name": "mukgall",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "",
   "main": "app.js",
   "scripts": {
@@ -15,7 +15,10 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "express-session": "^1.18.2",
+    "google-auth-library": "^10.4.0",
     "node-cron": "^4.2.1",
     "quill": "^2.0.3",
     "sqlite3": "^5.1.7"

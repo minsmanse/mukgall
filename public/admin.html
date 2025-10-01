@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MuKGaLL Admin">
+    <title>관리자 페이지 - 묵갤</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="gallery-header">
+            <div class="title-box">
+                <svg class="logo-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <h1>묵갤 관리자</h1>
+            </div>
+            <div id="admin-info"></div>
+        </header>
+        
+        <nav class="gallery-tabs" aria-label="주요 메뉴">
+            <a href="/board" class="tab">게시판으로</a>
+            <button id="logout-btn" class="tab" style="border: none; background: none; cursor: pointer;">로그아웃</button>
+        </nav>
+
+        <main class="gallery-content">
+            <div class="admin-controls">
+                <div class="admin-tabs">
+                    <button class="admin-tab active" data-tab="posts">게시글 관리</button>
+                    <button class="admin-tab" data-tab="comments">댓글 관리</button>
+                    <button class="admin-tab" data-tab="stats">통계</button>
+                </div>
+
+                <div class="admin-filters">
+                    <select id="status-filter" class="filter-select">
+                        <option value="all">전체</option>
+                        <option value="active" selected>활성</option>
+                        <option value="deleted">삭제됨</option>
+                    </select>
+                    <input type="text" id="search-input" class="search-input" placeholder="검색...">
+                </div>
+            </div>
+
+            <!-- 게시글 관리 탭 -->
+            <div id="posts-tab" class="admin-tab-content active">
+                <div class="admin-table-wrapper">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>제목</th>
+                                <th>작성자</th>
+                                <th>IP</th>
+                                <th>작성일</th>
+                                <th>조회</th>
+                                <th>추천</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="posts-tbody">
+                            <tr><td colspan="9" style="text-align: center; padding: 40px;">로딩 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination-wrapper">
+                    <button id="posts-prev" class="btn">이전</button>
+                    <span id="posts-page-info">1 / 1</span>
+                    <button id="posts-next" class="btn">다음</button>
+                </div>
+            </div>
+
+            <!-- 댓글 관리 탭 -->
+            <div id="comments-tab" class="admin-tab-content">
+                <div class="admin-table-wrapper">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>게시글</th>
+                                <th>작성자</th>
+                                <th>IP</th>
+                                <th>내용</th>
+                                <th>작성일</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comments-tbody">
+                            <tr><td colspan="8" style="text-align: center; padding: 40px;">로딩 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination-wrapper">
+                    <button id="comments-prev" class="btn">이전</button>
+                    <span id="comments-page-info">1 / 1</span>
+                    <button id="comments-next" class="btn">다음</button>
+                </div>
+            </div>
+
+            <!-- 통계 탭 -->
+            <div id="stats-tab" class="admin-tab-content">
+                <div class="admin-stats">
+                    <div class="stat-card">
+                        <h3>전체 게시글</h3>
+                        <p class="stat-number" id="total-posts">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>활성 게시글</h3>
+                        <p class="stat-number" id="active-posts">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>삭제된 게시글</h3>
+                        <p class="stat-number" id="deleted-posts">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>공지사항</h3>
+                        <p class="stat-number" id="total-notices">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>개념글</h3>
+                        <p class="stat-number" id="total-recommended">-</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>전체 댓글</h3>
+                        <p class="stat-number" id="total-comments">-</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/admin.js"></script>
+</body>
+</html>

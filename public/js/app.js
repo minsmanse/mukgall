@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3000/api/public';
+const API_BASE_URL = 'http://mukgall.o-r.kr/api/public';
 
 document.addEventListener('DOMContentLoaded', () => {
     const path = window.location.pathname;
@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
         initRecommendedPage();
     } else if (path === '/board/write') {
         initWritePage();
+    } else if (path === '/notice') {
+        initNoticePage();
     } else if (/^\/board\/\d+$/.test(path)) {
         initPostPage();
     }
@@ -20,10 +22,21 @@ function createPostRow(post) {
     postRow.className = 'post-row';
 
     let titleHtml = escapeHTML(post.title);
+    let titlePrefix = '';
 
-    if (post.promoted_at) {
+    // 댓글 수 표시
+    const commentCount = post.comment_count || 0;
+    const commentBadge = commentCount > 0 ? ` <span class="comment-count-badge">[${commentCount}]</span>` : '';
+
+    // 공지사항 표시
+    if (post.is_notice === 1) {
+        postRow.classList.add('notice-post');
+        titlePrefix = `<span class="notice-title-prefix">공지</span>`;
+    }
+    // 개념글 표시 (공지가 아닌 경우만)
+    else if (post.promoted_at) {
         postRow.classList.add('recommended-post');
-        titleHtml = `<span class="recommended-title-prefix">개념</span>` + titleHtml;
+        titlePrefix = `<span class="recommended-title-prefix">개념</span>`;
 
         const promotedDate = new Date(post.promoted_at.replace(' ', 'T') + 'Z');
         const hoursDiff = (new Date() - promotedDate) / 3600000;
@@ -32,6 +45,8 @@ function createPostRow(post) {
             postRow.classList.add('new-recommended-post');
         }
     }
+
+    titleHtml = titlePrefix + titleHtml + commentBadge;
 
     postRow.innerHTML = `
         <div class="col-id">${post.id}</div>
@@ -55,7 +70,7 @@ function initBoardPage() {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
                 result.data.forEach(post => postListBody.appendChild(createPostRow(post)));
-                loadMoreBtn.style.display = result.data.length < 15 ? 'block' : 'none';
+                loadMoreBtn.style.display = result.data.length >= 15 ? 'block' : 'none';
                 currentPage++;
             } else {
                 loadMoreBtn.style.display = 'none';
@@ -80,7 +95,7 @@ function initRecommendedPage() {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
                 result.data.forEach(post => postListBody.appendChild(createPostRow(post)));
-                loadMoreBtn.style.display = result.data.length < 15 ? 'block' : 'none';
+                loadMoreBtn.style.display = result.data.length >= 15 ? 'block' : 'none';
                 currentPage++;
             } else {
                 loadMoreBtn.style.display = 'none';
@@ -93,6 +108,36 @@ function initRecommendedPage() {
     }
     loadMoreBtn.addEventListener('click', () => fetchPosts(currentPage));
     fetchPosts(currentPage);
+}
+
+function initNoticePage() {
+    const postListBody = document.getElementById('post-list-body');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+
+    async function fetchNotices() {
+        try {
+            // 공지사항만 필터링해서 가져오기 (전체 게시글에서 is_notice = 1인 것만)
+            const response = await fetch(`${API_BASE_URL}/posts?page=1&limit=100`);
+            const result = await response.json();
+            
+            if (result.success) {
+                const notices = result.data.filter(post => post.is_notice === 1);
+                
+                if (notices.length > 0) {
+                    notices.forEach(post => postListBody.appendChild(createPostRow(post)));
+                    loadMoreBtn.style.display = 'none';
+                } else {
+                    postListBody.innerHTML = '<div class="post-row" style="justify-content:center; padding: 20px;">공지사항이 없습니다.</div>';
+                    loadMoreBtn.style.display = 'none';
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching notices:', error);
+            loadMoreBtn.style.display = 'none';
+        }
+    }
+    
+    fetchNotices();
 }
 
 async function initPostPage() {
@@ -114,9 +159,15 @@ async function initPostPage() {
             if (result.success) {
                 const post = result.data;
                 document.title = post.title;
+                
+                let titlePrefix = '';
+                if (post.is_notice === 1) {
+                    titlePrefix = '<span class="notice-title-prefix">공지</span> ';
+                }
+                
                 postContainer.innerHTML = `
                     <div class="post-view-header">
-                        <h2>${escapeHTML(post.title)}</h2>
+                        <h2>${titlePrefix}${escapeHTML(post.title)}</h2>
                     </div>
                     <div class="post-meta">
                         <span class="author-info">
@@ -124,7 +175,7 @@ async function initPostPage() {
                             <span class="author-ip">(${post.author_ip})</span>
                         </span>
                         <span class="meta-details">
-                            <span>${new Date(post.time).toLocaleString()}</span>
+                            <span>${formatDate(post.time, true)}</span>
                             <span style="margin-left: 10px;">조회 ${post.views || 0}</span>
                         </span>
                     </div>
@@ -152,7 +203,7 @@ async function initPostPage() {
             if (result.success) {
                 const { comments, total_count } = result.data;
                 let commentsHtml = `<div class="comment-count">전체댓글 ${total_count}개</div>`;
-                commentsHtml += buildCommentsTree(comments);
+                commentsHtml += buildCommentsTree(comments, 1); // depth 1부터 시작
                 commentsHtml += generateCommentForm();
                 commentsContainer.innerHTML = commentsHtml;
                 addCommentFormEventListeners();
@@ -195,8 +246,10 @@ function addVoteEventListeners(postId) {
     dislikeBtn.addEventListener('click', () => handleVote('dislike'));
 }
 
-function buildCommentsTree(comments) {
+function buildCommentsTree(comments, depth = 1) {
     let html = '';
+    const maxDepth = 2; // 최대 2단계까지만 들어가도록
+    
     for (const comment of comments) {
         html += `
             <div class="comment" id="comment-${comment.id}">
@@ -217,8 +270,16 @@ function buildCommentsTree(comments) {
                 <div class="reply-form-container"></div>
             </div>
         `;
+        
+        // depth가 maxDepth보다 작을 때만 대댓글을 들여쓰기로 표시
         if (comment.replies && comment.replies.length > 0) {
-            html += `<div class="comment-reply">${buildCommentsTree(comment.replies)}</div>`;
+            if (depth < maxDepth) {
+                // 2단계까지는 들여쓰기
+                html += `<div class="comment-reply">${buildCommentsTree(comment.replies, depth + 1)}</div>`;
+            } else {
+                // 3단계부터는 같은 레벨로 표시 (들여쓰기 없음)
+                html += buildCommentsTree(comment.replies, depth);
+            }
         }
     }
     return html;
@@ -342,24 +403,26 @@ function escapeHTML(str) {
 }
 
 function formatDate(dateString, full = false) {
-    const date = new Date(dateString.replace(' ', 'T') + 'Z');
+    // UTC 시간을 한국 시간(KST, UTC+9)으로 변환
+    const utcDate = new Date(dateString.replace(' ', 'T') + 'Z');
+    const kstDate = new Date(utcDate.getTime() + (9 * 60 * 60 * 1000));
 
     if (full) {
-        return date.toLocaleString('ko-KR', {
+        return kstDate.toLocaleString('ko-KR', {
             year: '2-digit',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
-        }).replace(/\. /g, '.').replace(/,/g, '');
+        }).replace(/\. /g, '.').replace(/\./g, '.').replace(/,/g, '');
     }
 
-    return date.toLocaleString('ko-KR', {
+    return kstDate.toLocaleString('ko-KR', {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
-    }).replace(/\. /g, '.').replace(/,/g, '');
+    }).replace(/\. /g, '.').replace(/\./g, '.').replace(/,/g, '');
 }

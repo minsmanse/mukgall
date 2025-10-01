@@ -6,7 +6,6 @@ class Database {
     this.db = null;
   }
 
-  // 데이터베이스 연결
   connect() {
     return new Promise((resolve, reject) => {
       const dbPath = path.join(__dirname, 'mukgall.db');
@@ -25,7 +24,7 @@ class Database {
   initTables() {
     return new Promise((resolve, reject) => {
       let tablesCreated = 0;
-      const totalTables = 3;
+      const totalTables = 5; // 4개 테이블 + 1개 컬럼 추가
       
       const checkComplete = () => {
         tablesCreated++;
@@ -35,7 +34,7 @@ class Database {
       };
 
       this.db.serialize(() => {
-        // Posts table - removed trailing comma
+        // Posts table
         this.db.run(`CREATE TABLE IF NOT EXISTS posts (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           ip TEXT NOT NULL,
@@ -46,6 +45,7 @@ class Database {
           likes INTEGER DEFAULT 0,
           dislikes INTEGER DEFAULT 0,
           views INTEGER DEFAULT 0,
+          is_notice INTEGER DEFAULT 0,
           status INTEGER DEFAULT 1
         )`, (err) => {
           if (err) {
@@ -57,7 +57,17 @@ class Database {
           }
         });
 
-        // Votes table - removed trailing comma
+        // 기존 테이블에 is_notice 컬럼 추가 (마이그레이션)
+        this.db.run(`ALTER TABLE posts ADD COLUMN is_notice INTEGER DEFAULT 0`, (err) => {
+          if (err && !err.message.includes('duplicate column')) {
+            console.error('⚠️ Cannot add is_notice column:', err.message);
+          } else {
+            console.log('✅ is_notice column checked/added.');
+          }
+          checkComplete();
+        });
+
+        // Votes table
         this.db.run(`CREATE TABLE IF NOT EXISTS votes (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           ip TEXT NOT NULL,
@@ -76,7 +86,7 @@ class Database {
           }
         });
 
-        // Comments table - removed trailing comma
+        // Comments table
         this.db.run(`CREATE TABLE IF NOT EXISTS comments (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           ip TEXT NOT NULL,
@@ -95,25 +105,26 @@ class Database {
             checkComplete();
           }
         });
+
+        // Recommended posts table
         this.db.run(`CREATE TABLE IF NOT EXISTS recommended_posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id INTEGER NOT NULL UNIQUE,
-            promoted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
-          )`, (err) => {
-            if (err) {
-              console.error('⚠️ Cannot Generate Recommended Posts Table:', err.message);
-              reject(err);
-            } else {
-              console.log('✅ Recommended Posts Table is Ready.');
-              checkComplete();
-            }
-          });
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          post_id INTEGER NOT NULL UNIQUE,
+          promoted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
+        )`, (err) => {
+          if (err) {
+            console.error('⚠️ Cannot Generate Recommended Posts Table:', err.message);
+            reject(err);
+          } else {
+            console.log('✅ Recommended Posts Table is Ready.');
+            checkComplete();
+          }
+        });
       });
     });
   }
 
-  // 데이터베이스 연결 종료
   close() {
     return new Promise((resolve, reject) => {
       if (this.db) {
@@ -131,6 +142,7 @@ class Database {
       }
     });
   }
+
   incrementPostViews(postId) {
     return new Promise((resolve, reject) => {
       const sql = `UPDATE posts SET views = views + 1 WHERE id = ?`;
@@ -144,36 +156,14 @@ class Database {
       });
     });
   }
-  getRecommendedPosts(page, limit, clientIP) {
-    return new Promise((resolve, reject) => {
-        const offset = (page - 1) * limit;
-        const sql = `
-            SELECT 
-                p.id, p.ip, p.author, p.title, p.likes, p.dislikes, p.time, p.views,
-                v.type as user_vote
-            FROM posts p
-            INNER JOIN recommended_posts rp ON p.id = rp.post_id
-            LEFT JOIN votes v ON p.id = v.post_id AND v.ip = ? AND v.status = 1
-            WHERE p.status = 1
-            ORDER BY rp.id DESC 
-            LIMIT ? OFFSET ?
-        `;
-        this.db.all(sql, [clientIP, limit, offset], (err, rows) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(rows);
-            }
-        });
-    });
-    
-}
-async promotePostsToRecommended() {
+
+  async promotePostsToRecommended() {
     const findSql = `
       SELECT id FROM posts
       WHERE 
         time >= datetime('now', '-24 hours')
         AND (views >= 10 OR likes >= 2)
+        AND is_notice = 0
         AND id NOT IN (SELECT post_id FROM recommended_posts)
     `;
     
@@ -201,20 +191,25 @@ async promotePostsToRecommended() {
         });
       }
     });
-}
-getBoardPosts(page, limit, clientIP) {
+  }
+
+  getBoardPosts(page, limit, clientIP) {
     return new Promise((resolve, reject) => {
       const offset = (page - 1) * limit;
       const sql = `
           SELECT 
               p.id, p.ip, p.author, p.title, p.likes, p.dislikes, p.time, p.views,
+              p.is_notice,
               v.type as user_vote,
-              rp.promoted_at
+              rp.promoted_at,
+              COUNT(c.id) as comment_count
           FROM posts p
           LEFT JOIN votes v ON p.id = v.post_id AND v.ip = ? AND v.status = 1
           LEFT JOIN recommended_posts rp ON p.id = rp.post_id
+          LEFT JOIN comments c ON p.id = c.post_id AND c.status = 1
           WHERE p.status = 1
-          ORDER BY p.id DESC 
+          GROUP BY p.id
+          ORDER BY p.is_notice DESC, p.id DESC 
           LIMIT ? OFFSET ?
       `;
       this.db.all(sql, [clientIP, limit, offset], (err, rows) => {
@@ -230,12 +225,16 @@ getBoardPosts(page, limit, clientIP) {
         const sql = `
             SELECT 
                 p.id, p.ip, p.author, p.title, p.likes, p.dislikes, p.time, p.views,
+                p.is_notice,
                 v.type as user_vote,
-                rp.promoted_at
+                rp.promoted_at,
+                COUNT(c.id) as comment_count
             FROM posts p
             INNER JOIN recommended_posts rp ON p.id = rp.post_id
             LEFT JOIN votes v ON p.id = v.post_id AND v.ip = ? AND v.status = 1
+            LEFT JOIN comments c ON p.id = c.post_id AND c.status = 1
             WHERE p.status = 1
+            GROUP BY p.id
             ORDER BY rp.id DESC 
             LIMIT ? OFFSET ?
         `;
